@@ -1,0 +1,808 @@
+[
+  {
+    "_id": "collection_appointment_decisions",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "AppointmentDecisionRaw",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "decision_id": {
+              "type": "string",
+              "description": "Alias cho _id, dùng để join hoặc trace cross-collection",
+              "examples": ["dec_20251031_abc"]
+            },
+            "user_id": { "type": "string", "index": true },
+            "image_hash": {
+              "type": "string",
+              "description": "SHA256 of uploaded image"
+            },
+            "ocr_raw": {
+              "type": "object",
+              "properties": {
+                "paddle_boxes": {
+                  "type": "array",
+                  "items": { "type": "object" }
+                },
+                "tesseract_text": { "type": "string" },
+                "easyocr_text": { "type": "string" }
+              }
+            },
+            "normalized": {
+              "type": "object",
+              "properties": {
+                "company_name": { "type": "string" },
+                "company_type": {
+                  "type": "string",
+                  "enum": [
+                    "CT",
+                    "TNHH",
+                    "MTV",
+                    "HTV",
+                    "CP",
+                    "PT",
+                    "TM",
+                    "DV",
+                    "ĐT",
+                    "TV",
+                    "XD",
+                    "VT",
+                    "GP",
+                    "JSC",
+                    "Co LTD",
+                    "HKD"
+                  ]
+                },
+                "personal_info": {
+                  "type": "object",
+                  "properties": {
+                    "id_type": {
+                      "type": "string",
+                      "enum": ["CCCD", "CMND", "Passport"]
+                    },
+                    "id_number": { "type": "string" },
+                    "full_name": { "type": "string", "minLength": 3 }
+                  },
+                  "required": ["id_type", "id_number", "full_name"]
+                },
+                "appointment_date": {
+                  "type": "object",
+                  "properties": {
+                    "day": { "type": "integer", "minimum": 1, "maximum": 31 },
+                    "month": { "type": "integer", "minimum": 1, "maximum": 12 },
+                    "year": { "type": "integer", "minimum": 1900 }
+                  },
+                  "required": ["day", "month", "year"]
+                },
+                "signing_authority": { "type": "string" },
+                "signing_person": {
+                  "type": "object",
+                  "properties": {
+                    "full_name": { "type": "string", "minLength": 2 },
+                    "title": { "type": "string" },
+                    "is_authorized": { "type": "boolean" },
+                    "authorization_rule": { "type": "string" }
+                  },
+                  "required": ["full_name", "title", "is_authorized"]
+                }
+              },
+              "required": [
+                "company_name",
+                "company_type",
+                "personal_info",
+                "appointment_date",
+                "signing_person"
+              ]
+            },
+            "stamp": {
+              "type": "object",
+              "description": "Thông tin dấu mộc đỏ tròn",
+              "properties": {
+                "detected": { "type": "boolean" },
+                "bbox": {
+                  "type": "array",
+                  "items": { "type": "integer" },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "description": "[x, y, width, height]"
+                },
+                "color_features": {
+                  "type": "object",
+                  "properties": {
+                    "dominant_red": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "red_ratio": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  }
+                },
+                "company_name_in_stamp": { "type": "string" },
+                "embedding": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 128,
+                  "description": "Vector embedding (e.g., from ResNet, CLIP, hoặc CNN custom)"
+                }
+              },
+              "required": ["detected"]
+            },
+            "status": {
+              "type": "string",
+              "enum": ["pending", "verified", "rejected"],
+              "default": "pending"
+            },
+            "created_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["_id", "user_id", "ocr_raw", "created_at"]
+        },
+        "jsonSample": [
+          {
+            "_id": "dec_20251031_abc",
+            "decision_id": "dec_20251031_abc",
+            "user_id": "user_001",
+            "image_hash": "sha256:...",
+            "ocr_raw": {
+              "paddle_boxes": [],
+              "tesseract_text": "CÔNG TY TNHH ABC ... BỔ NHIỆM KẾ TOÁN TRƯỞNG ... NGUYỄN VĂN A ... 15/10/2025",
+              "easyocr_text": "CÔNG TY TNHH ABC ... BỔ NHIỆM KẾ TOÁN TRƯỞNG ... NGUYỄN VĂN A ... 15/10/2025"
+            },
+            "normalized": {
+              "company_name": "CÔNG TY TNHH ABC",
+              "company_type": "TNHH",
+              "personal_info": {
+                "id_type": "CCCD",
+                "id_number": "012345678901",
+                "full_name": "NGUYỄN VĂN A"
+              },
+              "appointment_date": { "day": 15, "month": 10, "year": 2025 },
+              "signing_authority": "Giám đốc",
+              "signing_person": {
+                "full_name": "NGUYỄN THỊ B",
+                "title": "GIÁM ĐỐC",
+                "is_authorized": true,
+                "authorization_rule": "Công ty TNHH MTV: Giám đốc có thẩm quyền ký"
+              }
+            },
+            "stamp": {
+              "detected": true,
+              "bbox": [450, 600, 120, 120],
+              "color_features": {
+                "dominant_red": 220,
+                "red_ratio": 0.78
+              },
+              "company_name_in_stamp": "CÔNG TY TNHH ABC",
+              "embedding": [0.12, -0.45, 0.89]
+            },
+            "status": "pending",
+            "created_at": "2025-10-31T10:00:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$addFields": {
+                  "normalized": {
+                    "$function": {
+                      "body": "function(ocr) { /* Gọi BERT normalization microservice */ return normalized_result; }",
+                      "args": ["$ocr_raw"],
+                      "lang": "js"
+                    }
+                  },
+                  "signing_person": {
+                    "$function": {
+                      "body": "function(normalized, ocrText) { return extractAndValidateSigner(normalized.company_type, ocrText); }",
+                      "args": [
+                        "$normalized",
+                        {
+                          "$concat": [
+                            "$ocr_raw.tesseract_text",
+                            " ",
+                            "$ocr_raw.easyocr_text"
+                          ]
+                        }
+                      ],
+                      "lang": "js"
+                    }
+                  },
+                  "stamp": {
+                    "$function": {
+                      "body": "function(imageBytes) { return stampData; }",
+                      "args": ["$$ROOT.image_bytes"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_appointment_decisions",
+                  "on": "_id",
+                  "whenMatched": "replace",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Chuẩn hóa OCR bằng BERT và lưu kết quả vào collection."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "_id": "collection_company_registry",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "CompanyRegistry",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "tax_code": {
+              "type": "string",
+              "pattern": "^[0-9]{10,14}$",
+              "index": true
+            },
+            "company_name": { "type": "string" },
+            "company_type_abbr": {
+              "type": "string",
+              "enum": [
+                "CT",
+                "TNHH",
+                "MTV",
+                "HTV",
+                "CP",
+                "PT",
+                "TM",
+                "DV",
+                "ĐT",
+                "TV",
+                "XD",
+                "VT",
+                "GP",
+                "JSC",
+                "Co LTD",
+                "HKD"
+              ]
+            },
+            "verified_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["_id", "tax_code", "company_name", "verified_at"]
+        },
+        "jsonSample": [
+          {
+            "_id": "tax_0123456789",
+            "tax_code": "0123456789",
+            "company_name": "CÔNG TY TNHH ABC",
+            "company_type_abbr": "TNHH",
+            "verified_at": "2025-10-31T09:00:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$lookup": {
+                  "from": "collection_appointment_decisions",
+                  "localField": "tax_code",
+                  "foreignField": "normalized.company_name",
+                  "as": "matches"
+                }
+              }
+            ],
+            "purpose": "Tra cứu tên công ty từ mã số thuế (giao diện cổng thuế hoặc API)."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "_id": "collection_company_stamps",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "CompanyStampTemplate",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "company_name": { "type": "string", "index": true },
+            "company_type": {
+              "type": "string",
+              "enum": [
+                "CT",
+                "TNHH",
+                "MTV",
+                "HTV",
+                "CP",
+                "PT",
+                "TM",
+                "DV",
+                "ĐT",
+                "TV",
+                "XD",
+                "VT",
+                "GP",
+                "JSC",
+                "Co LTD",
+                "HKD"
+              ]
+            },
+            "tax_code": {
+              "type": "string",
+              "pattern": "^[0-9]{10,14}$",
+              "index": true
+            },
+            "stamp": {
+              "type": "object",
+              "properties": {
+                "stamp_text": {
+                  "type": "string",
+                  "description": "OCR text từ dấu mộc"
+                },
+                "embedding": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 128,
+                  "description": "Vector embedding của dấu (e.g., ResNet/CLIP)"
+                },
+                "created_at": { "type": "string", "format": "date-time" },
+                "approved_by": { "type": "string" },
+                "source_doc_id": {
+                  "type": "string",
+                  "description": "ID giấy gốc được duyệt"
+                }
+              },
+              "required": ["stamp_text", "embedding", "created_at"]
+            }
+          },
+          "required": [
+            "_id",
+            "company_name",
+            "company_type",
+            "tax_code",
+            "stamp"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "stamp_cty_abc_001",
+            "company_name": "CÔNG TY TNHH ABC",
+            "company_type": "TNHH",
+            "tax_code": "0123456789",
+            "stamp": {
+              "stamp_text": "CÔNG TY TNHH ABC",
+              "embedding": [0.12, -0.45, 0.89],
+              "created_at": "2025-10-01T09:00:00Z",
+              "approved_by": "admin_01",
+              "source_doc_id": "dec_20251001_xyz"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "_id": "collection_identity_vneid",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "VNeIDIdentity",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "id_type": {
+              "type": "string",
+              "enum": ["CCCD", "CMND", "Passport"]
+            },
+            "id_number": { "type": "string", "index": true },
+            "full_name": { "type": "string", "minLength": 3 },
+            "dob": { "type": "string", "format": "date" },
+            "verified_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "id_type",
+            "id_number",
+            "full_name",
+            "verified_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "id_cccd_012345678901",
+            "id_type": "CCCD",
+            "id_number": "012345678901",
+            "full_name": "NGUYỄN VĂN A",
+            "dob": "1990-01-01",
+            "verified_at": "2025-10-31T10:05:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$lookup": {
+                  "from": "collection_appointment_decisions",
+                  "localField": "id_number",
+                  "foreignField": "normalized.personal_info.id_number",
+                  "as": "matches"
+                }
+              }
+            ],
+            "purpose": "Tra cứu thông tin cá nhân từ VNeID (qua ReFrag hoặc API)."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "_id": "collection_verified_appointments",
+    "_public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "VerifiedAppointment",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "source_decision_id": { "type": "string", "index": true },
+            "user_id": { "type": "string" },
+            "company_name": { "type": "string" },
+            "full_name": { "type": "string" },
+            "appointment_date": { "type": "string", "format": "date" },
+            "document_hash": {
+              "type": "string",
+              "description": "Keccak256 of canonical JSON"
+            },
+            "blockchain_tx": {
+              "type": "string",
+              "description": "Transaction hash on blockchain"
+            },
+            "verified_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "source_decision_id",
+            "document_hash",
+            "verified_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "ver_20251031_abc",
+            "source_decision_id": "dec_20251031_abc",
+            "user_id": "user_001",
+            "company_name": "CÔNG TY TNHH ABC",
+            "full_name": "NGUYỄN VĂN A",
+            "appointment_date": "2025-10-15",
+            "document_hash": "0x7a8b9c...",
+            "blockchain_tx": "0xabc123...",
+            "verified_at": "2025-10-31T10:10:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$lookup": {
+                  "from": "collection_appointment_decisions",
+                  "localField": "company_name",
+                  "foreignField": "company_name",
+                  "as": "decision"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_company_registry",
+                  "localField": "decision.normalized.company_name",
+                  "foreignField": "company_name",
+                  "as": "company_match"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_identity_vneid",
+                  "localField": "decision.normalized.personal_info.id_number",
+                  "foreignField": "id_number",
+                  "as": "identity_match"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_company_stamps",
+                  "localField": "decision.normalized.company_name",
+                  "foreignField": "company_name",
+                  "as": "stamp_template"
+                }
+              },
+              {
+                "$addFields": {
+                  "stamp_similarity": {
+                    "$cond": [
+                      {
+                        "$and": [
+                          {
+                            "$gt": [
+                              {
+                                "$size": "$stamp_template"
+                              },
+                              0
+                            ]
+                          },
+                          {
+                            "$eq": ["$decision.stamp.detected", true]
+                          },
+                          {
+                            "$gt": [
+                              {
+                                "$size": "$decision.stamp.embedding"
+                              },
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "$let": {
+                          "vars": {
+                            "emb1": {
+                              "$arrayElemAt": ["$decision.stamp.embedding", 0]
+                            },
+                            "emb2": {
+                              "$arrayElemAt": [
+                                "$stamp_template.stamp.embedding",
+                                0
+                              ]
+                            }
+                          },
+                          "in": {
+                            "$let": {
+                              "vars": {
+                                "dot": {
+                                  "$reduce": {
+                                    "input": {
+                                      "$range": [
+                                        0,
+                                        {
+                                          "$size": "$$emb1"
+                                        }
+                                      ]
+                                    },
+                                    "initialValue": 0,
+                                    "in": {
+                                      "$add": [
+                                        "$$value",
+                                        {
+                                          "$multiply": [
+                                            {
+                                              "$arrayElemAt": [
+                                                "$$emb1",
+                                                "$$this"
+                                              ]
+                                            },
+                                            {
+                                              "$arrayElemAt": [
+                                                "$$emb2",
+                                                "$$this"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "norm1": {
+                                  "$sqrt": {
+                                    "$reduce": {
+                                      "input": "$$emb1",
+                                      "initialValue": 0,
+                                      "in": {
+                                        "$add": [
+                                          "$$value",
+                                          {
+                                            "$multiply": ["$$this", "$$this"]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                },
+                                "norm2": {
+                                  "$sqrt": {
+                                    "$reduce": {
+                                      "input": "$$emb2",
+                                      "initialValue": 0,
+                                      "in": {
+                                        "$add": [
+                                          "$$value",
+                                          {
+                                            "$multiply": ["$$this", "$$this"]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "in": {
+                                "$cond": [
+                                  {
+                                    "$and": [
+                                      {
+                                        "$gt": ["$$norm1", 0]
+                                      },
+                                      {
+                                        "$gt": ["$$norm2", 0]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "$divide": [
+                                      "$$dot",
+                                      {
+                                        "$multiply": ["$$norm1", "$$norm2"]
+                                      }
+                                    ]
+                                  },
+                                  0
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      0
+                    ]
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "is_valid": {
+                    "$and": [
+                      {
+                        "$gt": [
+                          {
+                            "$size": "$company_match"
+                          },
+                          0
+                        ]
+                      },
+
+                      {
+                        "$gt": [
+                          {
+                            "$size": "$identity_match"
+                          },
+                          0
+                        ]
+                      },
+
+                      {
+                        "$eq": [
+                          {
+                            "$arrayElemAt": [
+                              "$decision.normalized.personal_info.full_name",
+                              0
+                            ]
+                          },
+                          {
+                            "$arrayElemAt": ["$identity_match.full_name", 0]
+                          }
+                        ]
+                      },
+
+                      {
+                        "$eq": [
+                          {
+                            "$arrayElemAt": ["$decision.stamp.detected", 0]
+                          },
+                          true
+                        ]
+                      },
+
+                      {
+                        "$gt": [
+                          {
+                            "$size": "$stamp_template"
+                          },
+                          0
+                        ]
+                      },
+
+                      {
+                        "$gte": ["$stamp_similarity", 0.85]
+                      }
+                    ]
+                  }
+                }
+              },
+
+              {
+                "$match": { "is_valid": true }
+              },
+              {
+                "$addFields": {
+                  "document_hash": {
+                    "$function": {
+                      "body": "function(data) { const canonical = JSON.stringify(data, Object.keys(data).sort()); return '0x' + require('crypto').createHash('sha3-256').update(canonical).digest('hex'); }",
+                      "args": ["$decision.normalized"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "blockchain_tx": {
+                    "$function": {
+                      "body": "function(hash) { /* Gọi smart contract để ghi hash */ return tx_hash; }",
+                      "args": ["$document_hash"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$project": {
+                  "_id": "$source_decision_id",
+                  "source_decision_id": "$source_decision_id",
+                  "user_id": { "$arrayElemAt": ["$decision.user_id", 0] },
+                  "company_name": {
+                    "$arrayElemAt": ["$decision.normalized.company_name", 0]
+                  },
+                  "full_name": {
+                    "$arrayElemAt": [
+                      "$decision.normalized.personal_info.full_name",
+                      0
+                    ]
+                  },
+
+                  "document_hash": 1,
+                  "blockchain_tx": 1,
+                  "verified_at": "$$NOW"
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_verified_appointments",
+                  "on": "_id",
+                  "whenMatched": "replace",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Xác minh chéo dữ liệu → nếu khớp → hash → ghi blockchain."
+          }
+        ]
+      }
+    }
+  }
+]
