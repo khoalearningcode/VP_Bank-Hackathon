@@ -1,0 +1,38 @@
+# OCR Engines
+paddlepaddle>=2.5.0
+easyocr>=1.7.0
+pytesseract>=0.3.10
+mmocr>=1.0
+mmengine>=0.7.0
+
+# Computer Vision & Image Processing
+opencv-python-headless>=4.8.0
+Pillow>=9.0.0
+numpy>=1.21.0
+
+# PDF Handling
+pdf2image>=1.16.0
+PyPDF2>=3.0.0  # optional but useful
+
+# Deep Learning & Transformers
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+
+# Language Detection & Text Processing
+fasttext>=0.9.2
+python-Levenshtein>=0.23.0
+difflib  # built-in, but listed for clarity
+
+# Data & Utilities
+pandas>=1.5.0
+matplotlib>=3.7.0
+scikit-image>=0.20.0
+
+# Web & IO
+urllib3>=1.26.0
+requests>=2.28.0
+
+# Others
+tqdm>=4.65.0
+typing-extensions>=4.5.0
