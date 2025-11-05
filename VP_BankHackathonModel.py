@@ -464,7 +464,6 @@ def extract_text(image):
             best_text, best_conf, best_lang = choose_best_text(results)
             corr = corrector(best_text, max_length=MAX_LENGTH)
             best_text = corr[0]["generated_text"]
-            best_text = map_vietnamese_to_schema(best_text)
 
             # color = (0, 255, 0) if best_text != "(rỗng)" else (0, 200, 255)
             # annotated = draw_unicode_text(annotated, best_text, (x_min, max(0, y_min - 18)), color)
@@ -490,18 +489,13 @@ def extract_text(image):
             traceback.print_exc()
 
     print(f"\nHoàn tất OCR: {len(ocr_texts)} vùng.")
-
-    # --- Ghép toàn bộ text từ các vùng ---
     joined_text = " ".join(map(str, raw_text_list)).strip()
-
-    # --- Gọi map_vietnamese_to_schema để chuẩn hóa dữ liệu ---
-    schema_result = map_vietnamese_to_schema(joined_text)
-
-    # --- Trả kết quả đầy đủ ---
+    print(f"Toàn bộ text OCR ghép lại: {joined_text}")
+    # return " ".join(raw_text_list), ocr_texts, annotated
     return {
-        "joined_text": joined_text,
-        "ocr_regions": ocr_texts,
-        "schema": schema_result
+        "joined_text": joined_text,   # Toàn bộ text OCR ghép lại
+        "ocr_regions": ocr_texts
+        
     }
 
 MAX_LENGTH = 512
@@ -626,21 +620,20 @@ def map_vietnamese_to_schema(best_text: str) -> Dict[str, Any]:
     # --- 3️⃣ Full Name ---
     # --- 3️⃣ Full Name (Đã Sửa) ---
     m = re.search(
-        r"(ÔNG/BÀ|ông/bà|ÔNG\-BÀ)\s*[:\-]?\s*([A-ZÀ-Ỹa-zà-ỹ\s]{3,200})",
+        r"(ÔNG/BÀ|ông/bà|ÔNG\-BÀ|Ông - bà|ông - Bà )\s*[:\-]?\s*([A-ZÀ-Ỹa-zà-ỹ\s]{3,200})",
         text,
         flags=re.IGNORECASE
     )
     if m:
         # m.group(1) là danh xưng (vd: "ÔNG/BÀ")
         # m.group(2) là tên (vd: "DUƠNG THỊ THANH HOA")
-        print("kết quả thu được:", m.groups())
+        
         # 1. Gán Title (tùy chọn)
-        title = m.group(1).upper() 
-        print("✅ Danh xưng trích xuất được:", title)
+        # title = m.group(1).upper() 
         
         # 2. Lấy tên và chuẩn hóa
         fullname_extracted = m.group(2).strip()
-        print("✅ Tên đầy đủ trích xuất được:", fullname_extracted)
+        
         # 3. Gán tên ĐÚNG vào full_name
         normalized["personal_info"]["full_name"] = fullname_extracted.upper()
         
@@ -795,44 +788,16 @@ def main():
 
             # chạy OCR trực tiếp
             result = extract_text(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-            text = result["joined_text"]
-            print("🧾 Văn bản OCR trang", idx, ":\n", text)
-            details = result["ocr_regions"]
-            print(f"🔍 Chi tiết OCR trang {idx}:", details)
-            schema = result["schema"]
-            print(f"🗂️ Dữ liệu chuẩn hóa trang {idx}:", schema)
-
+            joined_text = result["joined_text"]
+            ocr_details = result["ocr_regions"]
+            schema = map_vietnamese_to_schema(joined_text)
+            print("schema", schema)
 
             # lưu annotate
             # preview_path = f"annotated_page_{idx}.jpg"
             # cv2.imwrite(preview_path, cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR))
             # print(f"✅ Ảnh chú thích OCR trang {idx} đã lưu tại: {preview_path}")
-
-            # build JSON
-            try:
-                with open(schema_path, "r", encoding="utf-8") as f:
-                    schema_data = json.load(f)
-                    if isinstance(schema_data, list) and len(schema_data) > 0:
-                        schema_data = schema_data[0]  # lấy phần tử đầu
-                    collection_id = schema_data.get("_id", "collection_appointment_decisions")
-                    print(f"📦 Đọc schema thành công: _id = {collection_id}")
-            except Exception as e:
-                print(f"⚠️ Không đọc được schema.json ({e}), dùng mặc định 'collection_appointment_decisions'")
-                collection_id = "collection_appointment_decisions"
-
-            json_data = build_appointment_decision_json(
-                image_array=np.array(img),
-                ocr_results=details,
-                user_id="user_001",
-                doc_id=f"dec_{base_name}_page{idx}",
-                collection_id=collection_id
-            )
-
-            json_path = f"appointment_decision_{base_name}_page{idx}.json"
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(json_data, f, ensure_ascii=False, indent=2)
-            print(f"✅ Đã lưu JSON schema trang {idx} vào: {json_path}")
-            
+                
     else:
         print(f"⚠️ Không hỗ trợ định dạng: {ext}")
 
