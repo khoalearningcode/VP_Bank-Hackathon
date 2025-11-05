@@ -490,8 +490,19 @@ def extract_text(image):
             traceback.print_exc()
 
     print(f"\nHoàn tất OCR: {len(ocr_texts)} vùng.")
-    # return " ".join(raw_text_list), ocr_texts, annotated
-    return " ".join(map(str, raw_text_list)), ocr_texts
+
+    # --- Ghép toàn bộ text từ các vùng ---
+    joined_text = " ".join(map(str, raw_text_list)).strip()
+
+    # --- Gọi map_vietnamese_to_schema để chuẩn hóa dữ liệu ---
+    schema_result = map_vietnamese_to_schema(joined_text)
+
+    # --- Trả kết quả đầy đủ ---
+    return {
+        "joined_text": joined_text,
+        "ocr_regions": ocr_texts,
+        "schema": schema_result
+    }
 
 MAX_LENGTH = 512
 corrector = pipeline("text2text-generation", model="bmd1905/vietnamese-correction")
@@ -615,20 +626,21 @@ def map_vietnamese_to_schema(best_text: str) -> Dict[str, Any]:
     # --- 3️⃣ Full Name ---
     # --- 3️⃣ Full Name (Đã Sửa) ---
     m = re.search(
-        r"(ÔNG/BÀ|ông/bà|ÔNG|BÀ|ÔNG\-BÀ|Ông|Bà)\s*[:\-]?\s*([A-ZÀ-Ỹa-zà-ỹ\s]{3,200})",
+        r"(ÔNG/BÀ|ông/bà|ÔNG\-BÀ)\s*[:\-]?\s*([A-ZÀ-Ỹa-zà-ỹ\s]{3,200})",
         text,
         flags=re.IGNORECASE
     )
     if m:
         # m.group(1) là danh xưng (vd: "ÔNG/BÀ")
         # m.group(2) là tên (vd: "DUƠNG THỊ THANH HOA")
-        
+        print("kết quả thu được:", m.groups())
         # 1. Gán Title (tùy chọn)
-        # title = m.group(1).upper() 
+        title = m.group(1).upper() 
+        print("✅ Danh xưng trích xuất được:", title)
         
         # 2. Lấy tên và chuẩn hóa
         fullname_extracted = m.group(2).strip()
-        
+        print("✅ Tên đầy đủ trích xuất được:", fullname_extracted)
         # 3. Gán tên ĐÚNG vào full_name
         normalized["personal_info"]["full_name"] = fullname_extracted.upper()
         
@@ -782,7 +794,14 @@ def main():
             print(f"\n--- Xử lý trang {idx}/{len(images)} ---")
 
             # chạy OCR trực tiếp
-            text, details = extract_text(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            result = extract_text(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            text = result["joined_text"]
+            print("🧾 Văn bản OCR trang", idx, ":\n", text)
+            details = result["ocr_regions"]
+            print(f"🔍 Chi tiết OCR trang {idx}:", details)
+            schema = result["schema"]
+            print(f"🗂️ Dữ liệu chuẩn hóa trang {idx}:", schema)
+
 
             # lưu annotate
             # preview_path = f"annotated_page_{idx}.jpg"
