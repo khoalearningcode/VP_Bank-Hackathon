@@ -569,110 +569,135 @@ SCHEMA_PATTERNS = {
 }
 
 def map_vietnamese_to_schema(best_text: str) -> Dict[str, Any]:
-    # Nếu đầu vào là list => join lại
-    if isinstance(best_text, list):
-        best_text = " ".join(best_text)
+    """
+    Hàm chuẩn hóa text OCR của Quyết định Bổ Nhiệm sang schema chuẩn hóa.
+    - Nhận đầu vào: chuỗi OCR đã ghép toàn bộ văn bản.
+    - Trích xuất thông tin: công ty, số quyết định, loại, người ký, người được bổ nhiệm, ngày tháng, hiệu lực, dấu, v.v.
+    """
+    text = best_text.upper()
 
-    text = best_text.upper().replace("\n", " ")
-
+    # ======================
+    # 1️⃣ Khởi tạo cấu trúc schema rỗng
+    # ======================
     normalized = {
-        "company_name": "",
-        "company_type": "",
-        "personal_info": {"id_type": "", "id_number": "", "full_name": ""},
-        "appointment_date": {"day": 0, "month": 0, "year": 0},
-        "signing_authority": "",
-        "signing_person": {"full_name": "", "title": "", "is_authorized": False}
+        "company_info": {
+            "company_name": "",
+            "company_type": "",
+            "decision_number": "",
+            "decision_type": "",
+            "issue_date": {"day": 0, "month": 0, "year": 0},      # ngày ký
+            "effective_date": {"day": 0, "month": 0, "year": 0},  # ngày hiệu lực
+            "has_valid_stamp": False
+        },
+        "signing_person": {
+            "full_name": "",
+            "position": "",
+            "signature_detected": False,
+            "authorization_rule": ""
+        },
+        "appointee": {
+            "full_name": "",
+            "id_number": "",
+            "position": "",
+            "document_ref": ""
+        }
     }
 
-    # --- 1️⃣ Company Name & Type ---
-    # Tìm công ty + loại hình
-    m = re.search(r"CÔNG\s*TY\s*(TRÁCH\s*NHIỆM\s*HỮU\s*HẠN|CỔ\s*PHẦN|MỘT\s*THÀNH\s*VIÊN|TNHH|CP|MTV)?\s*([A-ZÀ-Ỹ0-9\s]+)", text)
-    if m:
-        company_type_raw = m.group(1) or ""
-        company_name_raw = m.group(2).strip(" .,:;-")
+    # ======================
+    # 2️⃣ Nhận dạng tên công ty
+    # ======================
+    m_company = re.search(r"CÔNG\s*TY\s+([A-ZÀ-Ỹ0-9\s]+)", text)
+    if m_company:
+        normalized["company_info"]["company_name"] = "CÔNG TY " + m_company.group(1).strip()
 
-        # Gán loại hình
-        for k, v in COMPANY_TYPE_MAPPING.items():
-            if k in company_type_raw:
-                normalized["company_type"] = v
-                break
+    # Nhận dạng loại hình công ty (TNHH, CP, MTV,...)
+    m_type = re.search(r"(TNHH|CỔ\s*PHẦN|MTV|MỘT\s*THÀNH\s*VIÊN|HTV|JSC|CO\s*LTD)", text)
+    if m_type:
+        normalized["company_info"]["company_type"] = m_type.group(1).replace(" ", "")
 
-        normalized["company_name"] = f"CÔNG TY {company_type_raw} {company_name_raw}".strip()
+    # ======================
+    # 3️⃣ Số và loại quyết định
+    # ======================
+    # Ví dụ: “Số: 15/QĐ-CTYABC”
+    m_number = re.search(r"SỐ\s*[:\-]?\s*([0-9A-Z\/\-\_]+)", text)
+    if m_number:
+        normalized["company_info"]["decision_number"] = m_number.group(1).strip()
 
-    # --- 2️⃣ ID Type + Number ---
-    id_match = re.search(r"\b(\d{6,15})\b", text)
-    if id_match:
-        id_number = id_match.group(1)
-        normalized["personal_info"]["id_number"] = id_number
-        # 12 số → CCCD, 9 số → CMND, còn lại → Passport
-        if len(id_number) == 12:
-            normalized["personal_info"]["id_type"] = "CCCD"
-        elif len(id_number) == 9:
-            normalized["personal_info"]["id_type"] = "CMND"
-        else:
-            normalized["personal_info"]["id_type"] = "Passport"
+    # Loại quyết định: BỔ NHIỆM / MIỄN NHIỆM / ĐIỀU ĐỘNG
+    m_decision_type = re.search(r"(BỔ NHIỆM|MIỄN NHIỆM|ĐIỀU ĐỘNG|PHÂN CÔNG|BỔ SUNG)", text)
+    if m_decision_type:
+        normalized["company_info"]["decision_type"] = m_decision_type.group(1)
 
-    # --- 3️⃣ Full Name ---
-    # --- 3️⃣ Full Name (Đã Sửa) ---
-    m = re.search(
-        r"(ÔNG/BÀ|ông/bà|ÔNG|BÀ|ÔNG\-BÀ|Ông|Bà)\s*[:\-]?\s*([A-ZÀ-Ỹa-zà-ỹ\s]{3,200})",
-        text,
-        flags=re.IGNORECASE
-    )
-    if m:
-        # m.group(1) là danh xưng (vd: "ÔNG/BÀ")
-        # m.group(2) là tên (vd: "DUƠNG THỊ THANH HOA")
-        
-        # 1. Gán Title (tùy chọn)
-        # title = m.group(1).upper() 
-        
-        # 2. Lấy tên và chuẩn hóa
-        fullname_extracted = m.group(2).strip()
-        
-        # 3. Gán tên ĐÚNG vào full_name
-        normalized["personal_info"]["full_name"] = fullname_extracted.upper()
-        
-        # Ví dụ: Nếu bạn muốn giữ lại danh xưng, bạn nên dùng một key khác
-        # normalized["personal_info"]["title"] = title
-    else:
-        title = None
-        fullname = None
-
-    m_id = re.search(r"(CCCD|CMND|HỘ\s*CHIẾU|PASSPORT)\s*[:\-]?\s*([0-9A-Z]{6,15})", text, flags=re.IGNORECASE)
-    if m_id:
-        id_label = m_id.group(1).upper()
-        id_number = m_id.group(2)
-    else:
-        id_label = None
-        id_number = None
-
-    # --- 4️⃣ Appointment Date ---
-    m = re.search(
-        r"\bNGÀY\s+(\d{1,2})\s+THÁNG\s+(\d{1,2})\s+NĂM\s+(\d{4})\b",
-        text,
-        re.IGNORECASE
-    )
-    if m:
-        normalized["appointment_date"] = {
-            "day": int(m.group(1)),
-            "month": int(m.group(2)),
-            "year": int(m.group(3))
+    # ======================
+    # 4️⃣ Ngày ký quyết định
+    # ======================
+    # Mẫu phổ biến: “Ngày 15 tháng 10 năm 2025”
+    m_issue = re.search(r"NGÀY\s+(\d{1,2})\s+THÁNG\s+(\d{1,2})\s+NĂM\s+(\d{4})", text)
+    if m_issue:
+        normalized["company_info"]["issue_date"] = {
+            "day": int(m_issue.group(1)),
+            "month": int(m_issue.group(2)),
+            "year": int(m_issue.group(3))
         }
 
-    # --- 5️⃣ Signing Authority ---
-    m = re.search(r"(GIÁM ĐỐC|TỔNG GIÁM ĐỐC|CHỦ TỊCH|PHÓ GIÁM ĐỐC)\s*[:\-]?\s*([A-ZÀ-Ỹ\s]+)", text)
-    if m:
-        title = m.group(1).title()
-        person = m.group(2).strip(" ,.")
-        normalized["signing_authority"] = title
-        normalized["signing_person"] = {
-            "full_name": person,
-            "title": title,
-            "is_authorized": True,
-            "authorization_rule": f"Người ký là {title}, có thẩm quyền ký văn bản hành chính."
+    # ======================
+    # 5️⃣ Ngày hiệu lực (nếu có)
+    # ======================
+    # Mẫu: “Có hiệu lực từ ngày 20/10/2025” hoặc “Hiệu lực kể từ ngày ...”
+    m_effect = re.search(r"(HIỆU LỰC|CÓ HIỆU LỰC)\s*(KỂ TỪ)?\s*NGÀY\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})", text)
+    if m_effect:
+        normalized["company_info"]["effective_date"] = {
+            "day": int(m_effect.group(3)),
+            "month": int(m_effect.group(4)),
+            "year": int(m_effect.group(5))
         }
 
+    # ======================
+    # 6️⃣ Người được bổ nhiệm
+    # ======================
+    # Ví dụ: “Bổ nhiệm Ông Nguyễn Văn A giữ chức vụ Kế toán trưởng”
+    m_app = re.search(r"BỔ NHIỆM\s+(ÔNG|BÀ)\s+([A-ZÀ-Ỹ\s]+?)\s+(GIỮ|LÀM)\s+CHỨC\s*VỤ\s*[:\-]?\s*([A-ZÀ-Ỹ\s]+)", text)
+    if m_app:
+        normalized["appointee"]["full_name"] = m_app.group(2).strip()
+        normalized["appointee"]["position"] = m_app.group(4).strip()
+
+    # Nếu tách riêng hai bước (không có “giữ chức vụ”)
+    else:
+        m_app_name = re.search(r"(ÔNG|BÀ)\s+([A-ZÀ-Ỹ\s]{3,100})", text)
+        if m_app_name:
+            normalized["appointee"]["full_name"] = m_app_name.group(2).strip()
+
+        m_app_pos = re.search(r"CHỨC\s*VỤ\s*[:\-]?\s*([A-ZÀ-Ỹ\s]{3,100})", text)
+        if m_app_pos:
+            normalized["appointee"]["position"] = m_app_pos.group(1).strip()
+
+    # Lấy số giấy tờ / CCCD nếu có
+    m_app_id = re.search(r"(CCCD|CMND|SỐ)\s*[:\-]?\s*(\d{9,12})", text)
+    if m_app_id:
+        normalized["appointee"]["id_number"] = m_app_id.group(2)
+
+    # ======================
+    # 7️⃣ Người ký quyết định
+    # ======================
+    # Ví dụ: “GIÁM ĐỐC TRẦN VĂN B” hoặc “Chủ tịch HĐQT Nguyễn Thị C”
+    m_sign = re.search(r"(GIÁM ĐỐC|TỔNG GIÁM ĐỐC|CHỦ TỊCH|PHÓ GIÁM ĐỐC)\s+([A-ZÀ-Ỹ\s]+)", text)
+    if m_sign:
+        normalized["signing_person"]["position"] = m_sign.group(1).strip()
+        normalized["signing_person"]["full_name"] = m_sign.group(2).strip()
+        normalized["signing_person"]["signature_detected"] = True
+        normalized["signing_person"]["authorization_rule"] = f"Người ký là {m_sign.group(1)}, có thẩm quyền ký văn bản hành chính."
+
+    # ======================
+    # 8️⃣ Kiểm tra dấu mộc (chỉ flag logic, chưa nhận diện hình ảnh)
+    # ======================
+    if "DẤU" in text or "CÔNG TY" in text and "TRÒN" in text:
+        normalized["company_info"]["has_valid_stamp"] = True
+
+    # ======================
+    # ✅ Kết quả cuối cùng
+    # ======================
     return normalized
+
 
 def pdf_to_images(content: bytes, dpi=150):
     """
@@ -746,22 +771,18 @@ def build_appointment_decision_json(image_array, ocr_results, user_id, doc_id, c
     normalized = map_vietnamese_to_schema(joined_text)
 
     json_data = {
-        "_id": collection_id,
-        "public": {
-            "node_data": {
-                "jsonSchema": {
-                    "normalized": normalized,
-                    "user_id": user_id,
-                    "doc_id": doc_id,
-                    "created_at": datetime.datetime.now(datetime.UTC).isoformat()
-                }
-            }
-        }
+        "_id": f"dec_{doc_id}",
+        "user_id": user_id,
+        "image_hash": compute_image_hash(image_array),
+        "ocr_raw": {...},
+        "normalized": map_vietnamese_to_schema(joined_text),
+        "status": "pending",
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat()
     }
     return json_data
  
 def main():
-    path = r"./QDBN1.pdf"
+    path = r"/home/caokhoa/Documents/VP_Bank-Hackathon/QDBN/QDBN1.pdf"
     schema_path = "./schema.json"
 
     if not os.path.exists(path):
